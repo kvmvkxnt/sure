@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_03_120000) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_09_191910) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -1412,6 +1412,8 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_03_120000) do
     t.string "external_id"
     t.jsonb "extra", default: {}, null: false
     t.string "investment_activity_label"
+    t.decimal "conversion_amount", precision: 19, scale: 4
+    t.string "conversion_currency"
     t.index ["category_id"], name: "index_transactions_on_category_id"
     t.index ["external_id"], name: "index_transactions_on_external_id"
     t.index ["extra"], name: "index_transactions_on_extra", using: :gin

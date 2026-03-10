@@ -17,6 +17,8 @@ en:
       note_label: Notes
       note_placeholder: Enter a note
       submit: Add transaction
+      conversion_amount: Withdrawn from account (optional)
+      conversion_amount_placeholder: e.g. 29.81
       tags_label: Tags
       transfer: Transfer
     new:

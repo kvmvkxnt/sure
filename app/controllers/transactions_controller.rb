@@ -67,6 +67,7 @@ class TransactionsController < ApplicationController
     @entry = account.entries.new(entry_params)
 
     if @entry.save
+      @entry.transaction.create_conversion_fee_entry if @entry.transaction.has_conversion_data?
       @entry.sync_account_later
       @entry.lock_saved_attributes!
       @entry.mark_user_modified!
@@ -87,6 +88,9 @@ class TransactionsController < ApplicationController
     if @entry.update(entry_params)
       transaction = @entry.transaction
 
+      fee_synced = transaction.conversion_fee_relevant_changes?
+      transaction.sync_conversion_fee_entry if fee_synced
+
       if needs_rule_notification?(transaction)
         flash[:cta] = {
           type: "category_rule",
@@ -106,20 +110,24 @@ class TransactionsController < ApplicationController
       respond_to do |format|
         format.html { redirect_back_or_to account_path(@entry.account), notice: "Transaction updated" }
         format.turbo_stream do
-          render turbo_stream: [
-            turbo_stream.replace(
-              dom_id(@entry, :header),
-              partial: "transactions/header",
-              locals: { entry: @entry }
-            ),
-            turbo_stream.replace(
-              dom_id(@entry, :protection),
-              partial: "entries/protection_indicator",
-              locals: { entry: @entry, unlock_path: unlock_transaction_path(@entry.transaction) }
-            ),
-            turbo_stream.replace(@entry),
-            *flash_notification_stream_items
-          ]
+          if fee_synced
+            render turbo_stream: turbo_stream.action(:refresh, "")
+          else
+            render turbo_stream: [
+              turbo_stream.replace(
+                dom_id(@entry, :header),
+                partial: "transactions/header",
+                locals: { entry: @entry }
+              ),
+              turbo_stream.replace(
+                dom_id(@entry, :protection),
+                partial: "entries/protection_indicator",
+                locals: { entry: @entry, unlock_path: unlock_transaction_path(@entry.transaction) }
+              ),
+              turbo_stream.replace(@entry),
+              *flash_notification_stream_items
+            ]
+          end
         end
       end
     else
@@ -327,7 +335,7 @@ class TransactionsController < ApplicationController
     def entry_params
       entry_params = params.require(:entry).permit(
         :name, :date, :amount, :currency, :excluded, :notes, :nature, :entryable_type,
-        entryable_attributes: [ :id, :category_id, :merchant_id, :kind, :investment_activity_label, { tag_ids: [] } ]
+        entryable_attributes: [ :id, :category_id, :merchant_id, :kind, :investment_activity_label, :conversion_amount, { tag_ids: [] } ]
       )
 
       nature = entry_params.delete(:nature)

@@ -1,10 +1,12 @@
 class Transfer::Creator
-  def initialize(family:, source_account_id:, destination_account_id:, date:, amount:)
+  def initialize(family:, source_account_id:, destination_account_id:, date:, amount:, conversion_amount: nil, conversion_currency: nil)
     @family = family
     @source_account = family.accounts.find(source_account_id) # early throw if not found
     @destination_account = family.accounts.find(destination_account_id) # early throw if not found
     @date = date
     @amount = amount.to_d
+    @conversion_amount = conversion_amount.present? ? conversion_amount.to_d.nonzero? : nil
+    @conversion_currency = conversion_currency
   end
 
   def create
@@ -15,6 +17,7 @@ class Transfer::Creator
     )
 
     if transfer.save
+      create_transfer_fee_entry if should_create_transfer_fee?
       source_account.sync_later
       destination_account.sync_later
     end
@@ -23,7 +26,7 @@ class Transfer::Creator
   end
 
   private
-    attr_reader :family, :source_account, :destination_account, :date, :amount
+    attr_reader :family, :source_account, :destination_account, :date, :amount, :conversion_amount, :conversion_currency
 
     def outflow_transaction
       name = "#{name_prefix} to #{destination_account.name}"
@@ -64,12 +67,16 @@ class Transfer::Creator
     # If destination account has different currency, its transaction should show up as converted
     # Future improvement: instead of a 1:1 conversion fallback, add a UI/UX flow for missing rates
     def inflow_converted_money
-      Money.new(amount.abs, source_account.currency)
-           .exchange_to(
-             destination_account.currency,
-             date: date,
-             fallback_rate: 1.0
-           )
+      if conversion_amount.present?
+        Money.new(conversion_amount.abs, destination_account.currency)
+      else
+        Money.new(amount.abs, source_account.currency)
+             .exchange_to(
+               destination_account.currency,
+               date: date,
+               fallback_rate: 1.0
+            )
+      end
     end
 
     # The "expense" side of a transfer is treated different in analytics based on where it goes.
@@ -91,6 +98,37 @@ class Transfer::Creator
 
     def source_is_investment?
       source_account.investment? || source_account.crypto?
+    end
+
+    def should_create_transfer_fee?
+      conversion_amount.present?
+    end
+
+    def create_transfer_fee_entry
+      # Market value of what was received, in source account currency
+      market_value = Money.new(conversion_amount.abs, destination_account.currency)
+                          .exchange_to(source_account.currency, date: date, fallback_rate: nil)
+
+      return unless market_value
+
+      fee_amount = amount.abs - market_value.amount.abs
+      return unless fee_amount > 0.001
+
+      fees_category = family.categories.find_by(name: "Fees")
+
+      source_account.entries.create!(
+        name: "Conversion fee (#{source_account.currency} → #{destination_account.currency})",
+        date: date,
+        amount: fee_amount,
+        currency: source_account.currency,
+        user_modified: true,
+        entryable: Transaction.new(
+          kind: "standard",
+          category: fees_category
+        )
+      )
+    rescue Money::ConversionError
+      Rails.logger.warn("Could not create transfer conversion fee: no exchange rate for #{destination_account.currency}→#{source_account.currency} on #{date}")
     end
 
     def name_prefix

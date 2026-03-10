@@ -10,6 +10,7 @@ class Transaction < ApplicationRecord
   accepts_nested_attributes_for :taggings, allow_destroy: true
 
   after_save :clear_merchant_unlinked_association, if: :merchant_id_previously_changed?
+  before_destroy :destroy_conversion_fee_entry
 
   enum :kind, {
     standard: "standard", # A regular transaction, included in budget analytics
@@ -155,6 +156,67 @@ class Transaction < ApplicationRecord
     updated_extra.delete("potential_posted_match")
     update!(extra: updated_extra)
     true
+  end
+
+  def has_conversion_data?
+    conversion_amount.present?
+  end
+
+  def create_conversion_fee_entry
+    account = entry.account
+    account_currency = account.currency
+    operation_currency = entry.currency
+    date = entry.date
+
+    market_value = Money.new(entry.amount.abs, operation_currency)
+                        .exchange_to(account_currency, date: date, fallback_rate: nil)
+
+    return unless market_value
+
+    fee_amount = conversion_amount.abs - market_value.amount.abs
+    return unless fee_amount > 0.001
+
+    fees_category = account.family.categories.find_by(name: "Fees")
+
+    fee_entry = account.entries.create!(
+      name: "Conversion fee for: #{entry.name}",
+      date: date,
+      amount: fee_amount,
+      currency: account_currency,
+      user_modified: true,
+      entryable: Transaction.new(
+        kind: "standard",
+        category: fees_category
+      )
+    )
+
+    # Store reference to fee entry so we can sync/delete it later
+    update_column(:extra, (extra || {}).merge("conversion_fee_entry_id" => fee_entry.id))
+  rescue Money::ConversionError
+    Rails.logger.warn("Could not create conversion fee for transaction #{id}: no exchange rate for #{operation_currency}→#{account_currency} on #{date}")
+  end
+
+  def sync_conversion_fee_entry
+    destroy_conversion_fee_entry
+
+    if has_conversion_data?
+      create_conversion_fee_entry
+    end
+  end
+
+  def destroy_conversion_fee_entry
+    fee_entry_id = extra&.dig("conversion_fee_entry_id")
+    return unless fee_entry_id
+
+    Entry.find_by(id: fee_entry_id)&.destroy
+    update_column(:extra, (extra || {}).except("conversion_fee_entry_id"))
+  end
+
+  def conversion_fee_relevant_changes?
+    entry.saved_change_to_amount? ||
+    entry.saved_change_to_currency? ||
+    entry.saved_change_to_name? ||
+    saved_change_to_conversion_amount?
   end
 
   private
