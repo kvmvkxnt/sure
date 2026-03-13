@@ -1,4 +1,4 @@
-<%# locals: (entry:, income_categories:, expense_categories:) %>
+<%# locals: (entry:, categories:) %>
 
 <%= styled_form_with model: entry, url: transactions_path, class: "space-y-4" do |f| %>
   <% if entry.errors.any? %>
@@ -43,6 +43,16 @@
                       placeholder: t(".conversion_amount_placeholder"),
                       step: 0.01,
                       min: 0 %>
+      <%= ef.collection_select :category_id,
+                           categories,
+                           :id,
+                           :name,
+                           {
+                             prompt: t(".category_prompt"),
+                             label: t(".category"),
+                             variant: :badge,
+                             searchable: true,
+                           } %>
     <% end %>
     <%= f.fields_for :entryable do |ef| %>
       <% categories =
