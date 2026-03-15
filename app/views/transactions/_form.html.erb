@@ -38,25 +38,13 @@
 
     <%= f.money_field :amount, label: t(".amount"), required: true %>
     <%= f.fields_for :entryable do |ef| %>
+      <% categories =
+        params[:nature] == "inflow" ? @income_categories : @expense_categories %>
       <%= ef.number_field :conversion_amount,
                       label: t(".conversion_amount"),
                       placeholder: t(".conversion_amount_placeholder"),
                       step: 0.01,
                       min: 0 %>
-      <%= ef.collection_select :category_id,
-                           categories,
-                           :id,
-                           :name,
-                           {
-                             prompt: t(".category_prompt"),
-                             label: t(".category"),
-                             variant: :badge,
-                             searchable: true,
-                           } %>
-    <% end %>
-    <%= f.fields_for :entryable do |ef| %>
-      <% categories =
-        params[:nature] == "inflow" ? @income_categories : @expense_categories %>
       <%= ef.collection_select :category_id,
                            categories,
                            :id,

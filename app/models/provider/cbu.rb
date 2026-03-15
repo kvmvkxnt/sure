@@ -37,7 +37,7 @@ class Provider::Cbu < Provider
 
   def fetch_exchange_rate(from:, to:, date:)
     with_provider_response do
-      rates_response = fetch_exchange_rates(from: from, to: to, start_date: date - 5.days, end_date: date)
+      rates_response = fetch_exchange_rates(from: from, to: to, start_date: date - 10.days, end_date: date)
       raise Error, "No rates returned" unless rates_response.success? && rates_response.data.any?
 
       target = rates_response.data.select { |r| r.date <= date }.max_by(&:date)
