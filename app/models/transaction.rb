@@ -177,21 +177,32 @@ class Transaction < ApplicationRecord
   end
 
   def create_conversion_fee_entry
+    return unless has_conversion_data?
+  
     account = entry.account
     account_currency = account.currency
     operation_currency = entry.currency
     date = entry.date
-
-    market_value = Money.new(entry.amount.abs, operation_currency)
-                        .exchange_to(account_currency, date: date, fallback_rate: nil)
-
+  
+    begin
+      market_value = Money.new(entry.amount.abs, operation_currency)
+                          .exchange_to(account_currency, date: date, fallback_rate: nil)
+    rescue Money::ConversionError
+      Rails.logger.warn("Could not create conversion fee for transaction #{id}: no exchange rate for #{operation_currency}→#{account_currency} on #{date}. Install a provider that supports this pair (e.g. CBU for UZS).")
+      update_column(:extra, (extra || {}).merge("conversion_fee_skipped" => true, "conversion_fee_skip_reason" => "no_exchange_rate"))
+      return
+    end
+  
     return unless market_value
-
+  
     fee_amount = conversion_amount.abs - market_value.amount.abs
-    return unless fee_amount > 0.001
-
+    if fee_amount <= 0.001
+      Rails.logger.info("Skipping conversion fee for transaction #{id}: calculated fee #{fee_amount} #{account_currency} is zero or negative (got a better rate than market?)")
+      return
+    end
+  
     fees_category = account.family.categories.find_by(name: "Fees")
-
+  
     fee_entry = account.entries.create!(
       name: "Conversion fee for: #{entry.name}",
       date: date,
@@ -203,11 +214,8 @@ class Transaction < ApplicationRecord
         category: fees_category
       )
     )
-
-    # Store reference to fee entry so we can sync/delete it later
+  
     update_column(:extra, (extra || {}).merge("conversion_fee_entry_id" => fee_entry.id))
-  rescue Money::ConversionError
-    Rails.logger.warn("Could not create conversion fee for transaction #{id}: no exchange rate for #{operation_currency}→#{account_currency} on #{date}")
   end
 
   def sync_conversion_fee_entry
