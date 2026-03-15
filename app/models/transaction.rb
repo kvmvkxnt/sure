@@ -239,6 +239,7 @@ class Transaction < ApplicationRecord
     entry.saved_change_to_currency? ||
     entry.saved_change_to_name? ||
     saved_change_to_conversion_amount?
+  end
 
   # Find potential posted transactions that might be duplicates of this pending transaction
   # Returns entries (not transactions) for UI consistency with transfer matcher
