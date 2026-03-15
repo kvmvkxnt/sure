@@ -18,7 +18,9 @@ class TransfersController < ApplicationController
       source_account_id: transfer_params[:from_account_id],
       destination_account_id: transfer_params[:to_account_id],
       date: Date.parse(transfer_params[:date]),
-      amount: transfer_params[:amount].to_d
+      amount: transfer_params[:amount].to_d,
+      conversion_amount: transfer_params[:conversion_amount],
+      conversion_currency: transfer_params[:conversion_currency]
     ).create
 
     if @transfer.persisted?
@@ -59,7 +61,7 @@ class TransfersController < ApplicationController
     end
 
     def transfer_params
-      params.require(:transfer).permit(:from_account_id, :to_account_id, :amount, :date, :name, :excluded)
+      params.require(:transfer).permit(:from_account_id, :to_account_id, :amount, :date, :name, :excluded, :conversion_amount, :conversion_currency)
     end
 
     def transfer_update_params
