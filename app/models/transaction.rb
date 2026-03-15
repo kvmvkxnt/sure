@@ -185,17 +185,26 @@ class Transaction < ApplicationRecord
     date = entry.date
   
     begin
-      market_value = Money.new(entry.amount.abs, operation_currency)
-                          .exchange_to(account_currency, date: date, fallback_rate: nil)
-    rescue Money::ConversionError
-      Rails.logger.warn("Could not create conversion fee for transaction #{id}: no exchange rate for #{operation_currency}→#{account_currency} on #{date}. Install a provider that supports this pair (e.g. CBU for UZS).")
+      # For UZS pairs, use CBU directly — DB may have stale Yahoo Finance rates
+      rate_value = if Provider::Cbu.supports_pair?(operation_currency, account_currency)
+        cbu = Provider::Cbu.new
+        response = cbu.fetch_exchange_rate(from: operation_currency, to: account_currency, date: date)
+        raise Money::ConversionError, "CBU unavailable" unless response.success?
+        response.data.rate
+      else
+        ExchangeRate.find_or_fetch_rate(from: operation_currency, to: account_currency, date: date)&.rate
+      end
+  
+      raise Money::ConversionError, "No rate available" unless rate_value
+  
+      market_amount = entry.amount.abs.to_f * rate_value
+      fee_amount = conversion_amount.abs - market_amount
+    rescue Money::ConversionError => e
+      Rails.logger.warn("Could not create conversion fee for transaction #{id}: #{e.message}")
       update_column(:extra, (extra || {}).merge("conversion_fee_skipped" => true, "conversion_fee_skip_reason" => "no_exchange_rate"))
       return
     end
   
-    return unless market_value
-  
-    fee_amount = conversion_amount.abs - market_value.amount.abs
     if fee_amount <= 0.001
       Rails.logger.info("Skipping conversion fee for transaction #{id}: calculated fee #{fee_amount} #{account_currency} is zero or negative (got a better rate than market?)")
       return
