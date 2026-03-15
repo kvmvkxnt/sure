@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_09_191910) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_14_131357) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -123,6 +123,17 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_09_191910) do
     t.index [ "revoked_at" ], name: "index_api_keys_on_revoked_at"
     t.index [ "user_id", "source" ], name: "index_api_keys_on_user_id_and_source"
     t.index [ "user_id" ], name: "index_api_keys_on_user_id"
+  end
+
+  create_table "archived_exports", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.string "email", null: false
+    t.string "family_name"
+    t.string "download_token_digest", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["download_token_digest"], name: "index_archived_exports_on_download_token_digest", unique: true
+    t.index ["expires_at"], name: "index_archived_exports_on_expires_at"
   end
 
   create_table "balances", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -740,12 +751,12 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_09_191910) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "token_digest"
-    t.index [ "email", "family_id" ], name: "index_invitations_on_email_and_family_id", unique: true
-    t.index [ "email" ], name: "index_invitations_on_email"
-    t.index [ "family_id" ], name: "index_invitations_on_family_id"
-    t.index [ "inviter_id" ], name: "index_invitations_on_inviter_id"
-    t.index [ "token" ], name: "index_invitations_on_token", unique: true
-    t.index [ "token_digest" ], name: "index_invitations_on_token_digest", unique: true, where: "(token_digest IS NOT NULL)"
+    t.index ["email", "family_id"], name: "index_invitations_on_email_and_family_id_pending", unique: true, where: "(accepted_at IS NULL)"
+    t.index ["email"], name: "index_invitations_on_email"
+    t.index ["family_id"], name: "index_invitations_on_family_id"
+    t.index ["inviter_id"], name: "index_invitations_on_inviter_id"
+    t.index ["token"], name: "index_invitations_on_token", unique: true
+    t.index ["token_digest"], name: "index_invitations_on_token_digest", unique: true, where: "(token_digest IS NOT NULL)"
   end
 
   create_table "invite_codes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
