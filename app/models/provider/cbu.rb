@@ -39,11 +39,10 @@ class Provider::Cbu < Provider
     with_provider_response do
       rates_response = fetch_exchange_rates(from: from, to: to, start_date: date - 10.days, end_date: date)
       raise Error, "No rates returned" unless rates_response.success? && rates_response.data.any?
-
-      target = rates_response.data.select { |r| r.date <= date }.max_by(&:date)
-      raise Error, "No rate found for #{from}/#{to} on or before #{date}" unless target
-
-      target
+  
+      # CBU API always returns the latest rate regardless of requested date range.
+      # Use the most recent available rate as best approximation.
+      rates_response.data.max_by(&:date)
     end
   end
 
