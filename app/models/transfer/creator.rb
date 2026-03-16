@@ -101,7 +101,7 @@ class Transfer::Creator
     end
 
     def should_create_transfer_fee?
-      conversion_amount.present?
+      conversion_amount.present? && source_account.currency != destination_account.currency
     end
 
     def create_transfer_fee_entry
