@@ -117,19 +117,17 @@ class Transfer < ApplicationRecord
 
     def transfer_has_opposite_amounts
       return unless inflow_transaction&.entry && outflow_transaction&.entry
-
+    
       inflow_entry = inflow_transaction.entry
       outflow_entry = outflow_transaction.entry
-
+    
       inflow_amount = inflow_entry.amount
       outflow_amount = outflow_entry.amount
-
-      if inflow_entry.currency == outflow_entry.currency
-        # For same currency, amounts must be exactly opposite
-        errors.add(:base, "Must have opposite amounts") if inflow_amount + outflow_amount != 0
-      else
-        # For different currencies, just check the signs are opposite
-        errors.add(:base, "Must have opposite amounts") unless inflow_amount.negative? && outflow_amount.positive?
+    
+      # Check signs are opposite — inflow must be negative (credit), outflow positive (debit)
+      # We allow differing amounts to accommodate bank transfer fees/commissions
+      unless inflow_amount.negative? && outflow_amount.positive?
+        errors.add(:base, "Must have opposite amounts")
       end
     end
 
